@@ -94,6 +94,10 @@ function defineRefPropWarningGetter(props, displayName) {
  * will work. Instead test $$typeof field against Symbol.for('react.element') to check
  * if something is a React Element.
  *
+ * 创建新的React Element的工厂方法。
+ * 由于这个方法不再遵循常规类的模式，不要用new来调用，并且instanceof不再起作用；
+ * 通过对比$$typeo字段是否是Symbol.for('react.element')判定是否是一个React Element。
+ *
  * @param {*} type
  * @param {*} key
  * @param {string|object} ref
@@ -102,8 +106,15 @@ function defineRefPropWarningGetter(props, displayName) {
  * can warn. We want to get rid of owner and replace string `ref`s with arrow
  * functions, and as long as `this` and owner are the same, there will be no
  * change in behavior.
+ *
+ * @param {*} self 为方便我们给用户发出警告而提供的用于在React.createElement调用时检测哪里的`this`和它的`owner`不同的一个*临时的*辅助；
+ * 只要`this`和`owner`是一样的，元素的行为就没有发生变化，这样我们就摆脱了`owner`并且将`ref`替换为箭头函数。
+ *
  * @param {*} source An annotation object (added by a transpiler or otherwise)
  * indicating filename, line number, and/or other information.
+ *
+ * 一个用于指示当前文件名，行号，或其他信息的注解对象（编译器或其他方式添加）
+ *
  * @param {*} owner
  * @param {*} props
  * @internal
@@ -111,15 +122,18 @@ function defineRefPropWarningGetter(props, displayName) {
 const ReactElement = function(type, key, ref, self, source, owner, props) {
   const element = {
     // This tag allows us to uniquely identify this as a React Element
+    // 确认React Element的唯一标示
     $$typeof: REACT_ELEMENT_TYPE,
 
     // Built-in properties that belong on the element
+    // 属于element的内置属性
     type: type,
     key: key,
     ref: ref,
     props: props,
 
     // Record the component responsible for creating this element.
+    // 记录负责创建该元素的组件
     _owner: owner,
   };
 
@@ -128,12 +142,15 @@ const ReactElement = function(type, key, ref, self, source, owner, props) {
     // an external backing store so that we can freeze the whole object.
     // This can be replaced with a WeakMap once they are implemented in
     // commonly used development environments.
+    // 该验证标示现在是可变的；把它保存在一个外在的存贮中方便我们对整个对象冻结；
+    // 我们可以在WeakMap在常用的开发环境稳定了用它代替。
     element._store = {};
 
     // To make comparing ReactElements easier for testing purposes, we make
     // the validation flag non-enumerable (where possible, which should
     // include every environment we run tests in), so the test framework
     // ignores it.
+    // 我们将validation标识设置为不可枚举（non-enumerable），这样测试框架就可以忽略它，方便了我们在测试总比较ReactElement（我们应尽可能包含每一个测试场景）。
     Object.defineProperty(element._store, 'validated', {
       configurable: false,
       enumerable: false,
@@ -141,6 +158,7 @@ const ReactElement = function(type, key, ref, self, source, owner, props) {
       value: false,
     });
     // self and source are DEV only properties.
+    // self和cource是只在开发环境下才出现的属性
     Object.defineProperty(element, '_self', {
       configurable: false,
       enumerable: false,
@@ -149,6 +167,7 @@ const ReactElement = function(type, key, ref, self, source, owner, props) {
     });
     // Two elements created in two different places should be considered
     // equal for testing purposes and therefore we hide it from enumeration.
+    // 基于方便测试考量，两个从不同地方创建的元素应该被认定相等，因此将_sourve的可枚举性加以隐藏
     Object.defineProperty(element, '_source', {
       configurable: false,
       enumerable: false,
@@ -166,6 +185,7 @@ const ReactElement = function(type, key, ref, self, source, owner, props) {
 
 /**
  * Create and return a new ReactElement of the given type.
+ * 创建并返回一个给定类型的ReactElement
  * See https://reactjs.org/docs/react-api.html#createelement
  */
 export function createElement(type, config, children) {
@@ -202,6 +222,7 @@ export function createElement(type, config, children) {
 
   // Children can be more than one argument, and those are transferred onto
   // the newly allocated props object.
+  // children可能有多个参数，它们都会被赋给新创建的props对象
   const childrenLength = arguments.length - 2;
   if (childrenLength === 1) {
     props.children = children;
@@ -254,6 +275,7 @@ export function createElement(type, config, children) {
 
 /**
  * Return a function that produces ReactElements of a given type.
+ * 返回生产特定类型ReactElement的函数。
  * See https://reactjs.org/docs/react-api.html#createfactory
  */
 export function createFactory(type) {
@@ -263,6 +285,8 @@ export function createFactory(type) {
   // This should not be named `constructor` since this may not be the function
   // that created the element, and it may not even be a constructor.
   // Legacy hook: remove it
+  // 为了更方便的得到elements的type，将type暴露给了这个工厂函数或它的prototype。
+  // 由于这个函数很可能不是创建某个元素地函数，甚至不是一个构造函数，这个工厂函数不能命名为『构造函数』
   factory.type = type;
   return factory;
 }
@@ -283,6 +307,7 @@ export function cloneAndReplaceKey(oldElement, newKey) {
 
 /**
  * Clone and return a new ReactElement using element as the starting point.
+ * 基于element克隆并返回一个新的ReactElement
  * See https://reactjs.org/docs/react-api.html#cloneelement
  */
 export function cloneElement(element, config, children) {
@@ -301,18 +326,23 @@ export function cloneElement(element, config, children) {
   let key = element.key;
   let ref = element.ref;
   // Self is preserved since the owner is preserved.
+  // self跟owner一样保留原始的
   const self = element._self;
   // Source is preserved since cloneElement is unlikely to be targeted by a
   // transpiler, and the original source is probably a better indicator of the
   // true owner.
+  // ##open question##
+  // 克隆的元素不太可能成为编译器转译目标，并且element原始source能更好地指向真正owner，因此原始source将被保留
   const source = element._source;
 
   // Owner will be preserved, unless ref is overridden
+  // ref没有重写时，owner将被保留
   let owner = element._owner;
 
   if (config != null) {
     if (hasValidRef(config)) {
       // Silently steal the ref from the parent.
+      // 从父元素静态借用ref
       ref = config.ref;
       owner = ReactCurrentOwner.current;
     }
@@ -321,6 +351,7 @@ export function cloneElement(element, config, children) {
     }
 
     // Remaining properties override existing props
+    // 余下的配置参数覆盖原始的存在的props
     let defaultProps;
     if (element.type && element.type.defaultProps) {
       defaultProps = element.type.defaultProps;
@@ -332,6 +363,7 @@ export function cloneElement(element, config, children) {
       ) {
         if (config[propName] === undefined && defaultProps !== undefined) {
           // Resolve default props
+          // 使用默认props
           props[propName] = defaultProps[propName];
         } else {
           props[propName] = config[propName];
@@ -342,6 +374,7 @@ export function cloneElement(element, config, children) {
 
   // Children can be more than one argument, and those are transferred onto
   // the newly allocated props object.
+  // children可能有多个参数，它们都会被赋给新创建的props对象
   const childrenLength = arguments.length - 2;
   if (childrenLength === 1) {
     props.children = children;
@@ -358,6 +391,7 @@ export function cloneElement(element, config, children) {
 
 /**
  * Verifies the object is a ReactElement.
+ * 验证该对象是ReactElement
  * See https://reactjs.org/docs/react-api.html#isvalidelement
  * @param {?object} object
  * @return {boolean} True if `object` is a ReactElement.
