@@ -35,6 +35,7 @@ import {
   DOCUMENT_NODE,
   DOCUMENT_FRAGMENT_NODE,
 } from '../shared/HTMLNodeType';
+import dangerousStyleValue from '../shared/dangerousStyleValue';
 
 import type {DOMContainer} from './ReactDOM';
 
@@ -284,8 +285,13 @@ export function createTextInstance(
 }
 
 export const isPrimaryRenderer = true;
-export const scheduleTimeout = setTimeout;
-export const cancelTimeout = clearTimeout;
+// This initialization code may run even on server environments
+// if a component just imports ReactDOM (e.g. for findDOMNode).
+// Some environments might not have setTimeout or clearTimeout.
+export const scheduleTimeout =
+  typeof setTimeout === 'function' ? setTimeout : (undefined: any);
+export const cancelTimeout =
+  typeof clearTimeout === 'function' ? clearTimeout : (undefined: any);
 export const noTimeout = -1;
 
 // -------------------
@@ -437,8 +443,7 @@ export function unhideInstance(instance: Instance, props: Props): void {
     styleProp.hasOwnProperty('display')
       ? styleProp.display
       : null;
-  // $FlowFixMe Setting a style property to null is the valid way to reset it.
-  instance.style.display = display;
+  instance.style.display = dangerousStyleValue('display', display);
 }
 
 export function unhideTextInstance(

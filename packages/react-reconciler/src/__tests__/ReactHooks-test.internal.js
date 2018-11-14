@@ -15,6 +15,7 @@
 let React;
 let ReactFeatureFlags;
 let ReactTestRenderer;
+let ReactDOMServer;
 
 // Additional tests can be found in ReactHooksWithNoopRenderer. Plan is to
 // gradually migrate those to this file.
@@ -27,6 +28,7 @@ describe('ReactHooks', () => {
     ReactFeatureFlags.enableHooks = true;
     React = require('react');
     ReactTestRenderer = require('react-test-renderer');
+    ReactDOMServer = require('react-dom/server');
   });
 
   it('warns about variable number of dependencies', () => {
@@ -50,5 +52,46 @@ describe('ReactHooks', () => {
         'Incoming: A',
     ]);
     expect(ReactTestRenderer).toHaveYielded(['Did commit: A, B']);
+  });
+
+  it('warns for bad useEffect return values', () => {
+    const {useLayoutEffect} = React;
+    function App(props) {
+      useLayoutEffect(() => {
+        return props.return;
+      });
+      return null;
+    }
+    let root;
+
+    expect(() => {
+      root = ReactTestRenderer.create(<App return={17} />);
+    }).toWarnDev([
+      'Warning: useEffect function must return a cleanup function or ' +
+        'nothing.\n' +
+        '    in App (at **)',
+    ]);
+
+    expect(() => {
+      root.update(<App return={Promise.resolve()} />);
+    }).toWarnDev([
+      'Warning: useEffect function must return a cleanup function or ' +
+        'nothing. Promises and useEffect(async () => ...) are not supported, ' +
+        'but you can call an async function inside an effect.\n' +
+        '    in App (at **)',
+    ]);
+  });
+
+  // https://github.com/facebook/react/issues/14022
+  it('works with ReactDOMServer calls inside a component', () => {
+    const {useState} = React;
+    function App(props) {
+      const markup1 = ReactDOMServer.renderToString(<p>hello</p>);
+      const markup2 = ReactDOMServer.renderToStaticMarkup(<p>bye</p>);
+      const [counter] = useState(0);
+      return markup1 + counter + markup2;
+    }
+    const root = ReactTestRenderer.create(<App />);
+    expect(root.toJSON()).toMatchSnapshot();
   });
 });

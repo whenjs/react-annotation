@@ -4,8 +4,38 @@
     Changes that have landed in master but are not yet released.
     Click to see more.
   </summary>
-
 </details>
+
+## 16.6.3 (November 12, 2018)
+
+### React DOM
+
+* Fix bugs in `Suspense` and `lazy`. ([@acdlite](https://github.com/acdlite) in [#14133](https://github.com/facebook/react/pull/14133), [#14157](https://github.com/facebook/react/pull/14157), and [#14164](https://github.com/facebook/react/pull/14164))
+* Fix highlighting of `React.memo` updates in React DevTools. ([@bvaughn](https://github.com/bvaughn) in [#14141](https://github.com/facebook/react/pull/14141))
+* Fix interaction of Suspense with the React Profiler. ([@bvaughn](https://github.com/bvaughn) in [#14065](https://github.com/facebook/react/pull/14065))
+* Fix a false positive warning when using Suspense. ([@acdlite](https://github.com/acdlite) in [#14158](https://github.com/facebook/react/pull/14158))
+
+### React DOM Server
+
+* Fix incorrect sharing of context state between `renderToNodeStream()` calls. ([@sebmarkbage](https://github.com/sebmarkbage) in [#14182](https://github.com/facebook/react/pull/14182))
+* Add a warning about incorrect usage of the context API. ([@trueadm](https://github.com/trueadm) in [#14033](https://github.com/facebook/react/pull/14033))
+
+## 16.6.2 (November 12, 2018)
+
+This release was published in a broken state and should be skipped.
+
+## 16.6.1 (November 6, 2018)
+
+### React DOM
+
+* Fallback should not remount every time a promise resolves. ([@acdlite](https://github.com/acdlite) in [#14083](https://github.com/facebook/react/pull/14083))
+* Fix bug where Suspense keeps showing fallback even after everything finishes loading. ([@acdlite](https://github.com/acdlite) in [#14083](https://github.com/facebook/react/pull/14083))
+* Fix unresolved default props in lifecycle methods of a lazy component. ([@gaearon](https://github.com/gaearon) in [#14112](https://github.com/facebook/react/pull/14112))
+* Fix bug when recovering from an error thrown during complete phase. ([@gaearon](https://github.com/gaearon) in [#14104](https://github.com/facebook/react/pull/14104))
+
+### Scheduler (Experimental)
+
+* Switch from deadline object to `shouldYield` API. ([@acdlite](https://github.com/acdlite) in [#14025](https://github.com/facebook/react/pull/14025))
 
 
 ## 16.6.0 (October 23, 2018)

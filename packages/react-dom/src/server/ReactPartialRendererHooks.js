@@ -6,7 +6,12 @@
  *
  * @flow
  */
+
+import type {ThreadID} from './ReactThreadIDAllocator';
 import type {ReactContext} from 'shared/ReactTypes';
+import areHookInputsEqual from 'shared/areHookInputsEqual';
+
+import {validateContextBounds} from './ReactPartialRendererContext';
 
 import invariant from 'shared/invariant';
 import warning from 'shared/warning';
@@ -138,7 +143,9 @@ function readContext<T>(
   context: ReactContext<T>,
   observedBits: void | number | boolean,
 ): T {
-  return context._currentValue;
+  let threadID = currentThreadID;
+  validateContextBounds(context, threadID);
+  return context[threadID];
 }
 
 function useContext<T>(
@@ -146,7 +153,9 @@ function useContext<T>(
   observedBits: void | number | boolean,
 ): T {
   resolveCurrentlyRenderingComponent();
-  return context._currentValue;
+  let threadID = currentThreadID;
+  validateContextBounds(context, threadID);
+  return context[threadID];
 }
 
 function basicStateReducer<S>(state: S, action: BasicStateAction<S>): S {
@@ -236,7 +245,7 @@ function useMemo<T>(
   ) {
     const prevState = workInProgressHook.memoizedState;
     const prevInputs = prevState[1];
-    if (inputsAreEqual(nextInputs, prevInputs)) {
+    if (areHookInputsEqual(nextInputs, prevInputs)) {
       return prevState[0];
     }
   }
@@ -331,26 +340,13 @@ function dispatchAction<A>(
   }
 }
 
-function inputsAreEqual(arr1, arr2) {
-  // Don't bother comparing lengths because these arrays are always
-  // passed inline.
-  for (let i = 0; i < arr1.length; i++) {
-    // Inlined Object.is polyfill.
-    // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/is
-    const val1 = arr1[i];
-    const val2 = arr2[i];
-    if (
-      (val1 === val2 && (val1 !== 0 || 1 / val1 === 1 / (val2: any))) ||
-      (val1 !== val1 && val2 !== val2) // eslint-disable-line no-self-compare
-    ) {
-      continue;
-    }
-    return false;
-  }
-  return true;
-}
-
 function noop(): void {}
+
+export let currentThreadID: ThreadID = 0;
+
+export function setCurrentThreadID(threadID: ThreadID) {
+  currentThreadID = threadID;
+}
 
 export const Dispatcher = {
   readContext,
@@ -367,4 +363,7 @@ export const Dispatcher = {
   useCallback: noop,
   // Effects are not run in the server environment.
   useEffect: noop,
+};
+export const DispatcherWithoutHooks = {
+  readContext,
 };

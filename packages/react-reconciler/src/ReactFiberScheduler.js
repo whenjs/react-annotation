@@ -56,6 +56,7 @@ import {
   SimpleMemoComponent,
 } from 'shared/ReactWorkTags';
 import {
+  enableHooks,
   enableSchedulerTracing,
   enableProfilerTimer,
   enableUserTimingAPI,
@@ -73,11 +74,11 @@ import {
   scheduleDeferredCallback,
   cancelDeferredCallback,
   shouldYield,
+  prepareForCommit,
+  resetAfterCommit,
   scheduleTimeout,
   cancelTimeout,
   noTimeout,
-  prepareForCommit,
-  resetAfterCommit,
 } from './ReactFiberHostConfig';
 import {
   markPendingPriorityLevel,
@@ -164,7 +165,7 @@ import {
   commitDetachRef,
   commitPassiveHookEffects,
 } from './ReactFiberCommitWork';
-import {Dispatcher} from './ReactFiberDispatcher';
+import {Dispatcher, DispatcherWithoutHooks} from './ReactFiberDispatcher';
 
 export type Thenable = {
   then(resolve: () => mixed, reject?: () => mixed): mixed,
@@ -179,11 +180,11 @@ let warnAboutInvalidUpdates;
 
 if (enableSchedulerTracing) {
   // Provide explicit error message when production+profiling bundle of e.g. react-dom
-  // is used with production (non-profiling) bundle of schedule/tracing
+  // is used with production (non-profiling) bundle of scheduler/tracing
   invariant(
     __interactionsRef != null && __interactionsRef.current != null,
     'It is not supported to run the profiling version of a renderer (for example, `react-dom/profiling`) ' +
-      'without also replacing the `schedule/tracing` module with `schedule/tracing-profiling`. ' +
+      'without also replacing the `scheduler/tracing` module with `scheduler/tracing-profiling`. ' +
       'Your bundler might have a setting for aliasing both modules. ' +
       'Learn more at http://fb.me/react-profiling',
   );
@@ -274,11 +275,13 @@ let interruptedBy: Fiber | null = null;
 
 let stashedWorkInProgressProperties;
 let replayUnitOfWork;
+let mayReplayFailedUnitOfWork;
 let isReplayingFailedUnitOfWork;
 let originalReplayError;
 let rethrowOriginalError;
 if (__DEV__ && replayFailedUnitOfWorkWithInvokeGuardedCallback) {
   stashedWorkInProgressProperties = null;
+  mayReplayFailedUnitOfWork = true;
   isReplayingFailedUnitOfWork = false;
   originalReplayError = null;
   replayUnitOfWork = (
@@ -504,7 +507,7 @@ function commitAllLifeCycles(
       commitAttachRef(nextEffect);
     }
 
-    if (effectTag & Passive) {
+    if (enableHooks && effectTag & Passive) {
       rootWithPendingPassiveEffects = finishedRoot;
     }
 
@@ -768,7 +771,11 @@ function commitRoot(root: FiberRoot, finishedWork: Fiber): void {
     }
   }
 
-  if (firstEffect !== null && rootWithPendingPassiveEffects !== null) {
+  if (
+    enableHooks &&
+    firstEffect !== null &&
+    rootWithPendingPassiveEffects !== null
+  ) {
     // This commit included a passive effect. These do not need to fire until
     // after the next paint. Schedule an callback to fire them in an async
     // event. To ensure serial execution, the callback will be flushed early if
@@ -947,18 +954,22 @@ function completeUnitOfWork(workInProgress: Fiber): Fiber | null {
     const siblingFiber = workInProgress.sibling;
 
     if ((workInProgress.effectTag & Incomplete) === NoEffect) {
+      if (__DEV__ && replayFailedUnitOfWorkWithInvokeGuardedCallback) {
+        // Don't replay if it fails during completion phase.
+        mayReplayFailedUnitOfWork = false;
+      }
       // This fiber completed.
+      // Remember we're completing this unit so we can find a boundary if it fails.
+      nextUnitOfWork = workInProgress;
       if (enableProfilerTimer) {
         if (workInProgress.mode & ProfileMode) {
           startProfilerTimer(workInProgress);
         }
-
         nextUnitOfWork = completeWork(
           current,
           workInProgress,
           nextRenderExpirationTime,
         );
-
         if (workInProgress.mode & ProfileMode) {
           // Update render duration assuming we didn't error.
           stopProfilerTimerIfRunningAndRecordDelta(workInProgress, false);
@@ -970,10 +981,19 @@ function completeUnitOfWork(workInProgress: Fiber): Fiber | null {
           nextRenderExpirationTime,
         );
       }
+      if (__DEV__ && replayFailedUnitOfWorkWithInvokeGuardedCallback) {
+        // We're out of completion phase so replaying is fine now.
+        mayReplayFailedUnitOfWork = true;
+      }
       stopWorkTimer(workInProgress);
       resetChildExpirationTime(workInProgress, nextRenderExpirationTime);
       if (__DEV__) {
         ReactCurrentFiber.resetCurrentFiber();
+      }
+
+      if (nextUnitOfWork !== null) {
+        // Completing this fiber spawned new work. Work on that next.
+        return nextUnitOfWork;
       }
 
       if (
@@ -1029,9 +1049,18 @@ function completeUnitOfWork(workInProgress: Fiber): Fiber | null {
         return null;
       }
     } else {
-      if (workInProgress.mode & ProfileMode) {
+      if (enableProfilerTimer && workInProgress.mode & ProfileMode) {
         // Record the render duration for the fiber that errored.
         stopProfilerTimerIfRunningAndRecordDelta(workInProgress, false);
+
+        // Include the time spent working on failed children before continuing.
+        let actualDuration = workInProgress.actualDuration;
+        let child = workInProgress.child;
+        while (child !== null) {
+          actualDuration += child.actualDuration;
+          child = child.sibling;
+        }
+        workInProgress.actualDuration = actualDuration;
       }
 
       // This fiber did not complete because something threw. Pop values off
@@ -1054,19 +1083,6 @@ function completeUnitOfWork(workInProgress: Fiber): Fiber | null {
         stopWorkTimer(workInProgress);
         if (__DEV__ && ReactFiberInstrumentation.debugTool) {
           ReactFiberInstrumentation.debugTool.onCompleteWork(workInProgress);
-        }
-
-        if (enableProfilerTimer) {
-          // Include the time spent working on failed children before continuing.
-          if (next.mode & ProfileMode) {
-            let actualDuration = next.actualDuration;
-            let child = next.child;
-            while (child !== null) {
-              actualDuration += child.actualDuration;
-              child = child.sibling;
-            }
-            next.actualDuration = actualDuration;
-          }
         }
 
         // If completing this work spawned new work, do that next. We'll come
@@ -1192,7 +1208,11 @@ function renderRoot(root: FiberRoot, isYieldy: boolean): void {
   flushPassiveEffects();
 
   isWorking = true;
-  ReactCurrentOwner.currentDispatcher = Dispatcher;
+  if (enableHooks) {
+    ReactCurrentOwner.currentDispatcher = Dispatcher;
+  } else {
+    ReactCurrentOwner.currentDispatcher = DispatcherWithoutHooks;
+  }
 
   const expirationTime = root.nextExpirationTimeToWorkOn;
 
@@ -1277,20 +1297,36 @@ function renderRoot(root: FiberRoot, isYieldy: boolean): void {
       resetContextDependences();
       resetHooks();
 
+      // Reset in case completion throws.
+      // This is only used in DEV and when replaying is on.
+      let mayReplay;
+      if (__DEV__ && replayFailedUnitOfWorkWithInvokeGuardedCallback) {
+        mayReplay = mayReplayFailedUnitOfWork;
+        mayReplayFailedUnitOfWork = true;
+      }
+
       if (nextUnitOfWork === null) {
         // This is a fatal error.
         didFatal = true;
         onUncaughtError(thrownValue);
       } else {
+        if (enableProfilerTimer && nextUnitOfWork.mode & ProfileMode) {
+          // Record the time spent rendering before an error was thrown.
+          // This avoids inaccurate Profiler durations in the case of a suspended render.
+          stopProfilerTimerIfRunningAndRecordDelta(nextUnitOfWork, true);
+        }
+
         if (__DEV__) {
           // Reset global debug state
           // We assume this is defined in DEV
           (resetCurrentlyProcessingQueue: any)();
         }
 
-        const failedUnitOfWork: Fiber = nextUnitOfWork;
         if (__DEV__ && replayFailedUnitOfWorkWithInvokeGuardedCallback) {
-          replayUnitOfWork(failedUnitOfWork, thrownValue, isYieldy);
+          if (mayReplay) {
+            const failedUnitOfWork: Fiber = nextUnitOfWork;
+            replayUnitOfWork(failedUnitOfWork, thrownValue, isYieldy);
+          }
         }
 
         // TODO: we already know this isn't true in some cases.
@@ -1711,6 +1747,46 @@ function scheduleWorkToRoot(fiber: Fiber, expirationTime): FiberRoot | null {
     }
   }
 
+  if (enableSchedulerTracing) {
+    if (root !== null) {
+      const interactions = __interactionsRef.current;
+      if (interactions.size > 0) {
+        const pendingInteractionMap = root.pendingInteractionMap;
+        const pendingInteractions = pendingInteractionMap.get(expirationTime);
+        if (pendingInteractions != null) {
+          interactions.forEach(interaction => {
+            if (!pendingInteractions.has(interaction)) {
+              // Update the pending async work count for previously unscheduled interaction.
+              interaction.__count++;
+            }
+
+            pendingInteractions.add(interaction);
+          });
+        } else {
+          pendingInteractionMap.set(expirationTime, new Set(interactions));
+
+          // Update the pending async work count for the current interactions.
+          interactions.forEach(interaction => {
+            interaction.__count++;
+          });
+        }
+
+        const subscriber = __subscriberRef.current;
+        if (subscriber !== null) {
+          const threadID = computeThreadID(
+            expirationTime,
+            root.interactionThreadID,
+          );
+          subscriber.onWorkScheduled(interactions, threadID);
+        }
+      }
+    }
+  }
+  return root;
+}
+
+function scheduleWork(fiber: Fiber, expirationTime: ExpirationTime) {
+  const root = scheduleWorkToRoot(fiber, expirationTime);
   if (root === null) {
     if (__DEV__) {
       switch (fiber.tag) {
@@ -1725,49 +1801,6 @@ function scheduleWorkToRoot(fiber: Fiber, expirationTime): FiberRoot | null {
           break;
       }
     }
-    return null;
-  }
-
-  if (enableSchedulerTracing) {
-    const interactions = __interactionsRef.current;
-    if (interactions.size > 0) {
-      const pendingInteractionMap = root.pendingInteractionMap;
-      const pendingInteractions = pendingInteractionMap.get(expirationTime);
-      if (pendingInteractions != null) {
-        interactions.forEach(interaction => {
-          if (!pendingInteractions.has(interaction)) {
-            // Update the pending async work count for previously unscheduled interaction.
-            interaction.__count++;
-          }
-
-          pendingInteractions.add(interaction);
-        });
-      } else {
-        pendingInteractionMap.set(expirationTime, new Set(interactions));
-
-        // Update the pending async work count for the current interactions.
-        interactions.forEach(interaction => {
-          interaction.__count++;
-        });
-      }
-
-      const subscriber = __subscriberRef.current;
-      if (subscriber !== null) {
-        const threadID = computeThreadID(
-          expirationTime,
-          root.interactionThreadID,
-        );
-        subscriber.onWorkScheduled(interactions, threadID);
-      }
-    }
-  }
-
-  return root;
-}
-
-function scheduleWork(fiber: Fiber, expirationTime: ExpirationTime) {
-  const root = scheduleWorkToRoot(fiber, expirationTime);
-  if (root === null) {
     return;
   }
 
