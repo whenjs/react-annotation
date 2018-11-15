@@ -9,6 +9,7 @@
 import type {RefObject} from 'shared/ReactTypes';
 
 // an immutable object with a single mutable value
+// 返回一个只有属性值可以改变的不可变对象
 export function createRef(): RefObject {
   const refObject = {
     current: null,

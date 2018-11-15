@@ -10,6 +10,9 @@
  * which validates the props passed to the element. This is intended to be
  * used only in DEV and could be replaced by a static type checker for languages
  * that support it.
+ *
+ * ReactElementValidator提供了一个验证element工厂函数传入参数的包裹。
+ * 这个函数意在用于DEV环境下，并且可以被支持静态检查的语言静态类型检查器替代。
  */
 
 import lowPriorityWarning from 'shared/lowPriorityWarning';
@@ -65,6 +68,8 @@ function getSourceInfoErrorAddendum(elementProps) {
  * Warn if there's no key explicitly set on dynamic arrays of children or
  * object keys are not valid. This allows us to keep track of children between
  * updates.
+ *
+ * 当没有现实设定孩子节点动态数组的key或对象的keys不合法时发出警告；这样我们可以跟踪孩子节点的更新。
  */
 const ownerHasKeyUseWarning = {};
 
@@ -89,6 +94,8 @@ function getCurrentComponentErrorInfo(parentType) {
  * reordered. All children that haven't already been validated are required to
  * have a "key" property assigned to it. Error statuses are cached so a warning
  * will only be shown once.
+ * 一个元素的key没有显式赋值时发出警告；当前元素是数组，并且数组的大小可以改变；
+ * 所有没被验证的孩子节点都必须要有一个key的属性；错误状态会被缓存，所以只会显示一次。
  *
  * @internal
  * @param {ReactElement} element Element that requires a key.
@@ -109,6 +116,8 @@ function validateExplicitKey(element, parentType) {
   // Usually the current owner is the offender, but if it accepts children as a
   // property, it may be the creator of the child that's responsible for
   // assigning it a key.
+  // ##openquestion##
+  // 通常情况下当前owner会违反上面的规则；但如果当前owner接收孩子节点作为属性，它可能就成了为这些孩子节点key赋值的新的孩子节点的创造者。
   let childOwner = '';
   if (
     element &&
@@ -116,6 +125,7 @@ function validateExplicitKey(element, parentType) {
     element._owner !== ReactCurrentOwner.current
   ) {
     // Give the component that originally created this child.
+    // 基于创建当前孩子节点的原始组件
     childOwner = ` It was passed a child from ${getComponentName(
       element._owner.type,
     )}.`;
@@ -138,6 +148,8 @@ function validateExplicitKey(element, parentType) {
  * Ensure that every element either is passed in a static location, in an
  * array with an explicit keys property defined, or in an object literal
  * with valid key property.
+ *
+ * 保证不管是通过静态位置传入的元素，还是有显式属性key定义的数组，或者一个字面对象，都有一个合法的key属性。
  *
  * @internal
  * @param {ReactNode} node Statically passed child of any type.
@@ -180,6 +192,8 @@ function validateChildKeys(node, parentType) {
 /**
  * Given an element, validate that its props follow the propTypes definition,
  * provided by the type.
+ *
+ *验证指定元素符合type提供的propTypes定义
  *
  * @param {ReactElement} element
  */
@@ -233,6 +247,7 @@ function validatePropTypes(element) {
 
 /**
  * Given a fragment, validate that it can only be provided with fragment props
+ * 所有提供给fragment的props都是合法的
  * @param {ReactElement} fragment
  */
 function validateFragmentProps(fragment) {
@@ -264,6 +279,7 @@ export function createElementWithValidation(type, props, children) {
 
   // We warn in this case but don't throw. We expect the element creation to
   // succeed and there will likely be errors in render.
+  // 一个元素创建成功但是渲染时可能会出错，这种情况发出警告，不抛出错误。
   if (!validType) {
     let info = '';
     if (
@@ -311,6 +327,8 @@ export function createElementWithValidation(type, props, children) {
 
   // The result can be nullish if a mock or a custom function is used.
   // TODO: Drop this when these are no longer allowed as the type argument.
+  // 当是mock数据或自定以函数是，该结果可能为空；
+  // TODO：当mock数据和自定义函数不允许作为type参数传入时，该判断弃用。
   if (element == null) {
     return element;
   }
@@ -320,6 +338,8 @@ export function createElementWithValidation(type, props, children) {
   // We don't want exception behavior to differ between dev and prod.
   // (Rendering will throw with a helpful message and as soon as the type is
   // fixed, the key warnings will appear.)
+  // 要保持开发和生产环境异常行为信息提示一致，当type类型不合法时，与key相关的警告会被忽略，因为在key的验证逻辑中，传入非字符串或函数的类型会抛出令人迷惑的错误信息。
+  // （这样渲染过程中始终能给出有效的提示，当type类型的错误修复后，key相关的警告自然就会现实）
   if (validType) {
     for (let i = 2; i < arguments.length; i++) {
       validateChildKeys(arguments[i], type);

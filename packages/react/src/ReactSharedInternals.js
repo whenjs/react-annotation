@@ -32,6 +32,7 @@ import ReactDebugCurrentFrame from './ReactDebugCurrentFrame';
 const ReactSharedInternals = {
   ReactCurrentOwner,
   // Used by renderers to avoid bundling object-assign twice in UMD bundles:
+  // 渲染器用于避免在UMD打包中`object-assign`两次。
   assign,
 };
 
@@ -41,6 +42,9 @@ if (__UMD__) {
   // Since that would be a breaking change (e.g. for all existing CodeSandboxes).
   // This re-export is only required for UMD bundles;
   // CJS bundles use the shared NPM package.
+  // 为UMD包重新导出了schedule APIs。
+  // 这就避免了在小版本更新中为新的全局UMD引入依赖。
+  // 该导出尽在UMD包中需要；CJS包用的时共享的npm包。
   Object.assign(ReactSharedInternals, {
     Scheduler: {
       unstable_cancelCallback,

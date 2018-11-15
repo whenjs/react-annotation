@@ -12,9 +12,11 @@ import typeof {Dispatcher} from 'react-reconciler/src/ReactFiberDispatcher';
 
 /**
  * Keeps track of the current owner.
+ * 跟踪当前owner
  *
  * The current owner is the component who should own any components that are
  * currently being constructed.
+ * 当前owner是拥有正在构建的任何组件的一种组件
  */
 const ReactCurrentOwner = {
   /**

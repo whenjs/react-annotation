@@ -24,12 +24,14 @@ export function setCurrentlyValidatingElement(element: null | ReactElement) {
 
 if (__DEV__) {
   // Stack implementation injected by the current renderer.
+  // 当前renderer注入的stack实现
   ReactDebugCurrentFrame.getCurrentStack = (null: null | (() => string));
 
   ReactDebugCurrentFrame.getStackAddendum = function(): string {
     let stack = '';
 
     // Add an extra top frame while an element is being validated
+    // 验证一个元素的同时添加一个额外的顶层frame
     if (currentlyValidatingElement) {
       const name = getComponentName(currentlyValidatingElement.type);
       const owner = currentlyValidatingElement._owner;
@@ -41,6 +43,7 @@ if (__DEV__) {
     }
 
     // Delegate to the injected renderer-specific implementation
+    // 代理注入的render特定实现
     const impl = ReactDebugCurrentFrame.getCurrentStack;
     if (impl) {
       stack += impl() || '';
