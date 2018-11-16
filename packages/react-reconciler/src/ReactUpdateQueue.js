@@ -8,6 +8,7 @@
  */
 
 // UpdateQueue is a linked list of prioritized updates.
+// `UpdateQueue`是一个有优先级更新的线性表。
 //
 // Like fibers, update queues come in pairs: a current queue, which represents
 // the visible state of the screen, and a work-in-progress queue, which is
@@ -15,6 +16,10 @@
 // of double buffering. If a work-in-progress render is discarded before
 // finishing, we create a new work-in-progress by cloning the current queue.
 //
+// 跟fiber一样，队列更新成对出现：当前队列，即代表当前视窗的可视状态的队列；工作中队列（work-in-progress）
+// 即在提交之前，可以异步该表和处理的队列，以double buffering形式存储。
+// 如果工作中队列渲染在完成之前被丢弃，会基于当前工作中队列克隆出一个新的工作中队列。
+
 // Both queues share a persistent, singly-linked list structure. To schedule an
 // update, we append it to the end of both queues. Each queue maintains a
 // pointer to first update in the persistent list that hasn't been processed.
@@ -22,6 +27,9 @@
 // the current queue, since we always work on that one. The current queue's
 // pointer is only updated during the commit phase, when we swap in the
 // work-in-progress.
+// 两个队列共享一个持久化的单链表结构，要调度一次更新，需要把这次更新添加到两个队列的队尾；
+// 每一个队列都维护这一个到持久化链表第一个待处理更新的指针。
+// 由于所有任务在工作中队列进行，它的指针位置总是大于等于当前队列；当由当前队列切换到工作中队列时，当前队列会进行一次提交，它的指针也在这时才会更新。
 //
 // For example:
 //
@@ -42,12 +50,19 @@
 // current queue once it commits, there's no danger of applying the same
 // update twice.)
 //
+// 为避免有些更新没有经过更新就丢弃，所以每次都会把更新放到两个队列中。像如果只把更新添加到
+// 工作中队列，在通过克隆当前队列导致工作中队列重启时就会丢失一些更新，同样如果只把更新添加到
+// 当前队列中，当工作中队列提交并且与当前队列互换时也会导致一些更新的丢失，如果我们把更新添加
+// 到两个队列，就会保证当前队列中更新成为下一个工作中队列的一部分。（由于工作中队列一旦提交
+// 就会转换为当前队列，有些更新执行两次，但这样并没有太大的影响。）
 // Prioritization
 // --------------
 //
 // Updates are not sorted by priority, but by insertion; new updates are always
 // appended to the end of the list.
 //
+// 更新是经过插入循序，不是通过优先级排序，这样新的更新操作总会插入到队列的末尾。
+// 
 // The priority is still important, though. When processing the update queue
 // during the render phase, only the updates with sufficient priority are
 // included in the result. If we skip an update because it has insufficient
@@ -58,6 +73,11 @@
 // keep track of a base state, that represents the state before the first
 // update in the queue is applied.
 //
+// 但是更新的优先级依然很重要，当处理渲染阶段的更新队列时，只有拥有足够高优先级的更新才体现在
+// 渲染结果中；当一个更新操作由于优先级不够高被跳过时，它还在待处理的更新队列中，在低优先级的
+// 渲染中依然会处理。重要的是，不管更新优先级多高，被跳过的更新后续的所有更新都依然会呆在更新
+// 队列中，这也就意味着高优先级的更新有时会在不同的优先级执行两次。
+// 没有任何队列更新影响的原始状态也会被跟踪。
 // For example:
 //
 //   Given a base state of '', and the following queue of updates
