@@ -81,13 +81,16 @@
 // For example:
 //
 //   Given a base state of '', and the following queue of updates
-//
+//   基于一个基态''，和以下的更新队列
+// 
 //     A1 - B2 - C1 - D2
 //
 //   where the number indicates the priority, and the update is applied to the
 //   previous state by appending a letter, React will process these updates as
 //   two separate renders, one per distinct priority level:
-//
+//   当更新应用到状态上时，对应更新的字母会添加到状态中，更新队列中的数字代表优先级；
+//   React会把这些更新分成两次渲染，一次一个优先级。
+// 
 //   First render, at priority 1:
 //     Base state: ''
 //     Updates: [A1, C1]
@@ -103,6 +106,8 @@
 // updates when preceding updates are skipped, the final result is deterministic
 // regardless of priority. Intermediate state may vary according to system
 // resources, but the final state is always the same.
+// 虽然处理更新是按照插入顺序，但由于当有更新被跳过时，高优先级的更新会rebase，所以最终结果时确定的。
+// 中间体状态可能会系统资源千变万化，但最终状态一直一样。
 
 import type {Fiber} from './ReactFiber';
 import type {ExpirationTime} from './ReactFiberExpirationTime';
